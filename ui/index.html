@@ -1,0 +1,29 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Secret Vote Box - Encrypted Voting System</title>
+    <meta name="description" content="Vote freely, vote privately. Encrypted voting system where votes remain private until polls close, preventing trend-following and persuasion pressure." />
+    <meta name="author" content="Secret Vote Box" />
+    <meta name="keywords" content="encrypted voting, private voting, blockchain voting, secure polls, anonymous voting, FHEVM" />
+
+    <meta property="og:title" content="Secret Vote Box - Vote Freely. Vote Privately." />
+    <meta property="og:description" content="Encrypted voting system where your vote stays private until the poll ends. No pressure, no trend-following." />
+    <meta property="og:type" content="website" />
+
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="Secret Vote Box - Encrypted Voting" />
+    <meta name="twitter:description" content="Vote freely without pressure. Your opinion stays encrypted until polls close." />
+    
+    <!-- Load Zama Relayer SDK UMD bundle before the app -->
+    <!-- This sets up window.relayerSDK which is required by @zama-fhe/relayer-sdk/bundle -->
+    <script src="https://cdn.zama.ai/relayer-sdk-js/0.2.0/relayer-sdk-js.umd.cjs" type="text/javascript"></script>
+  </head>
+
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>
