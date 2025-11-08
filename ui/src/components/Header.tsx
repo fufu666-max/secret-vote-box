@@ -15,8 +15,8 @@ const Header = () => {
           <Link to="/" className="flex items-center gap-3">
             <img src={logo} alt="Secret Vote Box Logo" className="h-10 w-10" />
             <div>
-              <h1 className="text-xl font-bold text-foreground">Secret Vote Box</h1>
-              <p className="text-sm text-muted-foreground">Vote Freely. Vote Privately.</p>
+              <h1 className="text-xl font-bold text-foreground">Community Voting。</h1>
+              <p className="text-sm text-muted-foreground">Community Change Suggestions</p>
             </div>
           </Link>
           

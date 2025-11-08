@@ -17,14 +17,21 @@ contract SecretVoteBox is SepoliaConfig {
         bool isActive;
         mapping(uint256 => euint32) encryptedVoteCounts; // Encrypted vote count per option
         mapping(address => bool) hasVoted; // Track if user has voted
+        bool finalized; // Results have been decrypted and published
     }
 
     uint256 public pollCount;
     mapping(uint256 => Poll) public polls;
+    // Clear results storage after decryption (available to everyone)
+    mapping(uint256 => uint32[]) private _clearVoteCounts;
+    // Track pending decryption requests
+    mapping(uint256 => uint256) private _requestToPoll;
 
     event PollCreated(uint256 indexed pollId, address indexed creator, string title, uint256 expireAt);
     event VoteCast(uint256 indexed pollId, address indexed voter);
     event PollEnded(uint256 indexed pollId);
+    event FinalizeRequested(uint256 indexed pollId, uint256 requestId);
+    event ResultsPublished(uint256 indexed pollId);
 
     /// @notice Create a new poll
     /// @param title The poll question/title
@@ -154,6 +161,67 @@ contract SecretVoteBox is SepoliaConfig {
     /// @return The total number of polls created
     function getPollCount() external view returns (uint256) {
         return pollCount;
+    }
+
+    /// @notice Request decryption and publish clear results (anyone can trigger after poll ended)
+    /// @param pollId The ID of the poll
+    function requestFinalize(uint256 pollId) external {
+        Poll storage poll = polls[pollId];
+        require(!poll.isActive, "Poll still active");
+        require(!poll.finalized, "Already finalized");
+
+        // Build ciphertext array
+        uint256 len = poll.options.length;
+        bytes32[] memory cts = new bytes32[](len);
+        for (uint256 i = 0; i < len; i++) {
+            cts[i] = FHE.toBytes32(poll.encryptedVoteCounts[i]);
+        }
+
+        uint256 requestId = FHE.requestDecryption(cts, this.decryptionCallback.selector);
+        _requestToPoll[requestId] = pollId;
+        emit FinalizeRequested(pollId, requestId);
+    }
+
+    /// @notice Callback called by the FHE decryption oracle
+    /// @dev Expects concatenated uint32 cleartexts in bytes
+    function decryptionCallback(uint256 requestId, bytes memory cleartexts, bytes[] memory /*signatures*/) public returns (bool) {
+        uint256 pollId = _requestToPoll[requestId];
+        Poll storage poll = polls[pollId];
+        require(!poll.finalized, "Already finalized");
+        require(!poll.isActive, "Poll still active");
+
+        uint256 len = poll.options.length;
+        // Expect len * 32 bytes (each uint256 encoded), but oracle returns packed format for uint32 in examples.
+        // We parse as sequence of uint32 values from the bytes blob.
+        uint32[] memory counts = new uint32[](len);
+        require(cleartexts.length >= len * 4, "Invalid cleartexts length");
+        for (uint256 i = 0; i < len; i++) {
+            uint32 val;
+            assembly {
+                // read 4 bytes starting at offset (i*4 + 32) (skip bytes length slot)
+                val := shr(224, mload(add(add(cleartexts, 32), mul(i, 4))))
+            }
+            counts[i] = val;
+        }
+        // Store
+        delete _clearVoteCounts[pollId];
+        for (uint256 i = 0; i < len; i++) {
+            _clearVoteCounts[pollId].push(counts[i]);
+        }
+        poll.finalized = true;
+        emit ResultsPublished(pollId);
+        return true;
+    }
+
+    /// @notice Returns whether a poll has published clear results
+    function isFinalized(uint256 pollId) external view returns (bool) {
+        return polls[pollId].finalized;
+    }
+
+    /// @notice Get published clear vote counts for a poll (only available after finalize)
+    function getClearVoteCounts(uint256 pollId) external view returns (uint32[] memory) {
+        require(polls[pollId].finalized, "Results not available");
+        return _clearVoteCounts[pollId];
     }
 }
 

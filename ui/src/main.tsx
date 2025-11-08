@@ -92,6 +92,8 @@ const shouldBlockUrl = (url: string): boolean => {
   return url.includes('cca-lite.coinbase.com') || 
          url.includes('coinbase.com/metrics') || 
          url.includes('coinbase.com/amp') ||
+         url.includes('11155111.rpc.thirdweb.com') ||
+         url.includes('thirdweb.com') ||
          url.includes('api.web3modal.org') ||
          url.includes('pulse.walletconnect.org') ||
          url.includes('walletconnect.org') ||

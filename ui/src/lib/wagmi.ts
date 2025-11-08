@@ -38,7 +38,8 @@ export const config = getDefaultConfig({
   ssr: false,
   transports: {
     [localhost.id]: http("http://localhost:8545"),
-    [sepolia.id]: http(),
+    // Avoid default third-party RPCs that may rate-limit or block CORS
+    [sepolia.id]: http("https://rpc.sepolia.org"),
   },
 });
 

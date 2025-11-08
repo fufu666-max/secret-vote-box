@@ -27,19 +27,28 @@ export interface SecretVoteBoxInterface extends Interface {
   getFunction(
     nameOrSignature:
       | "createPoll"
+      | "decryptionCallback"
       | "endPoll"
+      | "getClearVoteCounts"
       | "getEncryptedVoteCount"
       | "getPoll"
       | "getPollCount"
       | "hasVoted"
+      | "isFinalized"
       | "pollCount"
       | "polls"
       | "protocolId"
+      | "requestFinalize"
       | "vote"
   ): FunctionFragment;
 
   getEvent(
-    nameOrSignatureOrTopic: "PollCreated" | "PollEnded" | "VoteCast"
+    nameOrSignatureOrTopic:
+      | "FinalizeRequested"
+      | "PollCreated"
+      | "PollEnded"
+      | "ResultsPublished"
+      | "VoteCast"
   ): EventFragment;
 
   encodeFunctionData(
@@ -47,7 +56,15 @@ export interface SecretVoteBoxInterface extends Interface {
     values: [string, string, string[], BigNumberish]
   ): string;
   encodeFunctionData(
+    functionFragment: "decryptionCallback",
+    values: [BigNumberish, BytesLike, BytesLike[]]
+  ): string;
+  encodeFunctionData(
     functionFragment: "endPoll",
+    values: [BigNumberish]
+  ): string;
+  encodeFunctionData(
+    functionFragment: "getClearVoteCounts",
     values: [BigNumberish]
   ): string;
   encodeFunctionData(
@@ -66,6 +83,10 @@ export interface SecretVoteBoxInterface extends Interface {
     functionFragment: "hasVoted",
     values: [BigNumberish, AddressLike]
   ): string;
+  encodeFunctionData(
+    functionFragment: "isFinalized",
+    values: [BigNumberish]
+  ): string;
   encodeFunctionData(functionFragment: "pollCount", values?: undefined): string;
   encodeFunctionData(functionFragment: "polls", values: [BigNumberish]): string;
   encodeFunctionData(
@@ -73,12 +94,24 @@ export interface SecretVoteBoxInterface extends Interface {
     values?: undefined
   ): string;
   encodeFunctionData(
+    functionFragment: "requestFinalize",
+    values: [BigNumberish]
+  ): string;
+  encodeFunctionData(
     functionFragment: "vote",
     values: [BigNumberish, BytesLike, BytesLike]
   ): string;
 
   decodeFunctionResult(functionFragment: "createPoll", data: BytesLike): Result;
+  decodeFunctionResult(
+    functionFragment: "decryptionCallback",
+    data: BytesLike
+  ): Result;
   decodeFunctionResult(functionFragment: "endPoll", data: BytesLike): Result;
+  decodeFunctionResult(
+    functionFragment: "getClearVoteCounts",
+    data: BytesLike
+  ): Result;
   decodeFunctionResult(
     functionFragment: "getEncryptedVoteCount",
     data: BytesLike
@@ -89,10 +122,31 @@ export interface SecretVoteBoxInterface extends Interface {
     data: BytesLike
   ): Result;
   decodeFunctionResult(functionFragment: "hasVoted", data: BytesLike): Result;
+  decodeFunctionResult(
+    functionFragment: "isFinalized",
+    data: BytesLike
+  ): Result;
   decodeFunctionResult(functionFragment: "pollCount", data: BytesLike): Result;
   decodeFunctionResult(functionFragment: "polls", data: BytesLike): Result;
   decodeFunctionResult(functionFragment: "protocolId", data: BytesLike): Result;
+  decodeFunctionResult(
+    functionFragment: "requestFinalize",
+    data: BytesLike
+  ): Result;
   decodeFunctionResult(functionFragment: "vote", data: BytesLike): Result;
+}
+
+export namespace FinalizeRequestedEvent {
+  export type InputTuple = [pollId: BigNumberish, requestId: BigNumberish];
+  export type OutputTuple = [pollId: bigint, requestId: bigint];
+  export interface OutputObject {
+    pollId: bigint;
+    requestId: bigint;
+  }
+  export type Event = TypedContractEvent<InputTuple, OutputTuple, OutputObject>;
+  export type Filter = TypedDeferredTopicFilter<Event>;
+  export type Log = TypedEventLog<Event>;
+  export type LogDescription = TypedLogDescription<Event>;
 }
 
 export namespace PollCreatedEvent {
@@ -121,6 +175,18 @@ export namespace PollCreatedEvent {
 }
 
 export namespace PollEndedEvent {
+  export type InputTuple = [pollId: BigNumberish];
+  export type OutputTuple = [pollId: bigint];
+  export interface OutputObject {
+    pollId: bigint;
+  }
+  export type Event = TypedContractEvent<InputTuple, OutputTuple, OutputObject>;
+  export type Filter = TypedDeferredTopicFilter<Event>;
+  export type Log = TypedEventLog<Event>;
+  export type LogDescription = TypedLogDescription<Event>;
+}
+
+export namespace ResultsPublishedEvent {
   export type InputTuple = [pollId: BigNumberish];
   export type OutputTuple = [pollId: bigint];
   export interface OutputObject {
@@ -199,7 +265,19 @@ export interface SecretVoteBox extends BaseContract {
     "nonpayable"
   >;
 
+  decryptionCallback: TypedContractMethod<
+    [requestId: BigNumberish, cleartexts: BytesLike, arg2: BytesLike[]],
+    [boolean],
+    "nonpayable"
+  >;
+
   endPoll: TypedContractMethod<[pollId: BigNumberish], [void], "nonpayable">;
+
+  getClearVoteCounts: TypedContractMethod<
+    [pollId: BigNumberish],
+    [bigint[]],
+    "view"
+  >;
 
   getEncryptedVoteCount: TypedContractMethod<
     [pollId: BigNumberish, optionIndex: BigNumberish],
@@ -230,23 +308,32 @@ export interface SecretVoteBox extends BaseContract {
     "view"
   >;
 
+  isFinalized: TypedContractMethod<[pollId: BigNumberish], [boolean], "view">;
+
   pollCount: TypedContractMethod<[], [bigint], "view">;
 
   polls: TypedContractMethod<
     [arg0: BigNumberish],
     [
-      [string, string, bigint, string, boolean] & {
+      [string, string, bigint, string, boolean, boolean] & {
         title: string;
         description: string;
         expireAt: bigint;
         creator: string;
         isActive: boolean;
+        finalized: boolean;
       }
     ],
     "view"
   >;
 
   protocolId: TypedContractMethod<[], [bigint], "view">;
+
+  requestFinalize: TypedContractMethod<
+    [pollId: BigNumberish],
+    [void],
+    "nonpayable"
+  >;
 
   vote: TypedContractMethod<
     [pollId: BigNumberish, optionIndex: BytesLike, inputProof: BytesLike],
@@ -271,8 +358,18 @@ export interface SecretVoteBox extends BaseContract {
     "nonpayable"
   >;
   getFunction(
+    nameOrSignature: "decryptionCallback"
+  ): TypedContractMethod<
+    [requestId: BigNumberish, cleartexts: BytesLike, arg2: BytesLike[]],
+    [boolean],
+    "nonpayable"
+  >;
+  getFunction(
     nameOrSignature: "endPoll"
   ): TypedContractMethod<[pollId: BigNumberish], [void], "nonpayable">;
+  getFunction(
+    nameOrSignature: "getClearVoteCounts"
+  ): TypedContractMethod<[pollId: BigNumberish], [bigint[]], "view">;
   getFunction(
     nameOrSignature: "getEncryptedVoteCount"
   ): TypedContractMethod<
@@ -307,6 +404,9 @@ export interface SecretVoteBox extends BaseContract {
     "view"
   >;
   getFunction(
+    nameOrSignature: "isFinalized"
+  ): TypedContractMethod<[pollId: BigNumberish], [boolean], "view">;
+  getFunction(
     nameOrSignature: "pollCount"
   ): TypedContractMethod<[], [bigint], "view">;
   getFunction(
@@ -314,12 +414,13 @@ export interface SecretVoteBox extends BaseContract {
   ): TypedContractMethod<
     [arg0: BigNumberish],
     [
-      [string, string, bigint, string, boolean] & {
+      [string, string, bigint, string, boolean, boolean] & {
         title: string;
         description: string;
         expireAt: bigint;
         creator: string;
         isActive: boolean;
+        finalized: boolean;
       }
     ],
     "view"
@@ -328,6 +429,9 @@ export interface SecretVoteBox extends BaseContract {
     nameOrSignature: "protocolId"
   ): TypedContractMethod<[], [bigint], "view">;
   getFunction(
+    nameOrSignature: "requestFinalize"
+  ): TypedContractMethod<[pollId: BigNumberish], [void], "nonpayable">;
+  getFunction(
     nameOrSignature: "vote"
   ): TypedContractMethod<
     [pollId: BigNumberish, optionIndex: BytesLike, inputProof: BytesLike],
@@ -335,6 +439,13 @@ export interface SecretVoteBox extends BaseContract {
     "nonpayable"
   >;
 
+  getEvent(
+    key: "FinalizeRequested"
+  ): TypedContractEvent<
+    FinalizeRequestedEvent.InputTuple,
+    FinalizeRequestedEvent.OutputTuple,
+    FinalizeRequestedEvent.OutputObject
+  >;
   getEvent(
     key: "PollCreated"
   ): TypedContractEvent<
@@ -350,6 +461,13 @@ export interface SecretVoteBox extends BaseContract {
     PollEndedEvent.OutputObject
   >;
   getEvent(
+    key: "ResultsPublished"
+  ): TypedContractEvent<
+    ResultsPublishedEvent.InputTuple,
+    ResultsPublishedEvent.OutputTuple,
+    ResultsPublishedEvent.OutputObject
+  >;
+  getEvent(
     key: "VoteCast"
   ): TypedContractEvent<
     VoteCastEvent.InputTuple,
@@ -358,6 +476,17 @@ export interface SecretVoteBox extends BaseContract {
   >;
 
   filters: {
+    "FinalizeRequested(uint256,uint256)": TypedContractEvent<
+      FinalizeRequestedEvent.InputTuple,
+      FinalizeRequestedEvent.OutputTuple,
+      FinalizeRequestedEvent.OutputObject
+    >;
+    FinalizeRequested: TypedContractEvent<
+      FinalizeRequestedEvent.InputTuple,
+      FinalizeRequestedEvent.OutputTuple,
+      FinalizeRequestedEvent.OutputObject
+    >;
+
     "PollCreated(uint256,address,string,uint256)": TypedContractEvent<
       PollCreatedEvent.InputTuple,
       PollCreatedEvent.OutputTuple,
@@ -378,6 +507,17 @@ export interface SecretVoteBox extends BaseContract {
       PollEndedEvent.InputTuple,
       PollEndedEvent.OutputTuple,
       PollEndedEvent.OutputObject
+    >;
+
+    "ResultsPublished(uint256)": TypedContractEvent<
+      ResultsPublishedEvent.InputTuple,
+      ResultsPublishedEvent.OutputTuple,
+      ResultsPublishedEvent.OutputObject
+    >;
+    ResultsPublished: TypedContractEvent<
+      ResultsPublishedEvent.InputTuple,
+      ResultsPublishedEvent.OutputTuple,
+      ResultsPublishedEvent.OutputObject
     >;
 
     "VoteCast(uint256,address)": TypedContractEvent<

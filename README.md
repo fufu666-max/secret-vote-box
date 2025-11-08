@@ -1,20 +1,19 @@
-# 🔐 Secret Vote Box - Encrypted Voting System
+# 🗳️ Community Voting - Governance DApp
 
-A decentralized voting application built with **FHEVM (Fully Homomorphic Encryption Virtual Machine)** that enables encrypted voting on the blockchain. Votes remain encrypted until polls close, ensuring privacy and preventing trend-following.
+A community governance voting dApp. Built on **FHEVM (Fully Homomorphic Encryption Virtual Machine)**, it keeps every voter’s choice and the total vote count encrypted while the poll is active. After the poll ends, on-chain decryption reveals each option’s count and percentage to everyone, without exposing voter identities.
 
 ![License](https://img.shields.io/badge/license-MIT-blue.svg)
 ![Node](https://img.shields.io/badge/node-%3E%3D20-green.svg)
 ![Solidity](https://img.shields.io/badge/solidity-^0.8.0-orange.svg)
 
-## ✨ Features
+## ✨ Features (Community/DAO)
 
-- 🔒 **Encrypted Voting**: Votes are encrypted using FHEVM until polls close
-- 🌐 **Multi-Network Support**: Supports both localhost (Hardhat) and Sepolia testnet
-- 💼 **Wallet Integration**: Connect using RainbowKit with multiple wallet options
-- 🔐 **Privacy-First**: Vote counts are encrypted and cannot be viewed until poll expiration
-- 🚀 **Decentralized**: No central authority controls the voting process
-- 📊 **Real-time Updates**: View active polls and vote counts in real-time
-- 🎯 **User-Friendly**: Intuitive UI built with React and Tailwind CSS
+- 🔒 Privacy-first: during voting, individual choices and the total count are encrypted to prevent trend-following
+- 🔓 Post-expiry disclosure: after the poll ends, on-chain decryption reveals per-option counts and percentages (never identities)
+- 🌐 Multi-network support: Local Hardhat and Sepolia testnet
+- 💼 Wallet integration: RainbowKit/Wagmi for easy wallet connections
+- 🚀 Fully decentralized: data and computation are on-chain, no central database
+- 🧭 Community-friendly: ideal for DAO proposals, community feedback, and governance polls
 
 ## 🛠️ Tech Stack
 
@@ -25,13 +24,12 @@ A decentralized voting application built with **FHEVM (Fully Homomorphic Encrypt
 - **Ethers.js** ^6.15.0 - Ethereum library
 
 ### Frontend
-- **React** ^18.3.1 - UI framework
-- **TypeScript** - Type safety
-- **Vite** - Build tool
-- **Tailwind CSS** - Styling
+- **React** ^18.3.1
+- **TypeScript**
+- **Vite**
+- **Tailwind CSS**
 - **RainbowKit** - Wallet connection
-- **Wagmi** - React Hooks for Ethereum
-- **Viem** - TypeScript Ethereum library
+- **Wagmi / Viem** - Ethereum Hooks/TS libs
 - **@zama-fhe/relayer-sdk** - FHEVM SDK
 
 ## 📁 Project Structure
@@ -39,7 +37,7 @@ A decentralized voting application built with **FHEVM (Fully Homomorphic Encrypt
 ```
 fhevm-hardhat-template/
 ├── contracts/
-│   └── SecretVoteBox.sol      # Main voting contract with FHEVM
+│   └── SecretVoteBox.sol      # Core voting contract (FHE homomorphic counting)
 ├── test/
 │   ├── SecretVoteBox.ts       # Local network tests
 │   └── SecretVoteBoxSepolia.ts # Sepolia testnet tests
@@ -110,8 +108,8 @@ npx hardhat node
 npx hardhat deploy --network localhost
 ```
 
-3. **Contract Address**: The contract will be deployed at:
-   - `0x5FbDB2315678afecb367f032d93F642f64180aa3` (default Hardhat address)
+3. **Contract Address (local)**:
+   - `0x5FbDB2315678afecb367f032d93F642f64180aa3`
 
 ### Sepolia Testnet
 
@@ -121,8 +119,8 @@ npx hardhat vars setup
 ```
 
 2. **Configure your private key and Infura API key**
-   - Set `PRIVATE_KEY` in your environment
-   - Set `INFURA_API_KEY` in your environment
+   - Set `PRIVATE_KEY`
+   - Set `INFURA_API_KEY`
 
 3. **Deploy to Sepolia**
 ```bash
@@ -130,14 +128,14 @@ npx hardhat deploy --network sepolia
 ```
 
 4. **Deployed Contract Address on Sepolia**:
-   - `0x638A70A2901fD2e644EC3625B7674A25ceB33c59`
+
 
 ## 🌐 Network Configuration
 
-The application supports multiple networks with automatic contract address selection:
+The application automatically selects the contract address based on the current network:
 
 | Network | Chain ID | Contract Address |
-|---------|----------|------------------|
+|--------|----------|------------------|
 | Localhost (Hardhat) | 31337 | `0x5FbDB2315678afecb367f032d93F642f64180aa3` |
 | Sepolia Testnet | 11155111 | `0x638A70A2901fD2e644EC3625B7674A25ceB33c59` |
 
@@ -177,36 +175,35 @@ pnpm run dev
    - Navigate to `http://localhost:8080`
 
 4. **Connect your wallet**
-   - Click "Connect Wallet" in the top right
-   - Select your preferred wallet (MetaMask, Rainbow, etc.)
+   - Click "Connect Wallet" (top right)
+   - Select your wallet (MetaMask, Rainbow, etc.)
    - Ensure you're connected to the correct network (localhost or Sepolia)
 
-## 📖 Usage Guide
+## 📖 Usage Guide (Community Theme)
 
-### Creating a Poll
+### Create a Poll (Proposal)
 
 1. **Navigate to "Create Poll"**
-2. **Fill in poll details**:
-   - Title: The poll question
-   - Description: Additional context
-   - Options: At least 2 voting options
-   - Expiration: When the poll should close (minimum 5 minutes from now)
-3. **Click "Create Poll"** and confirm the transaction in your wallet
+2. **Fill in details**:
+   - Title: poll question (e.g., “Adopt proposal X?”)
+   - Description: background/context
+   - Options: at least two choices
+   - Expiration: end time (at least 5 minutes in the future)
+3. **Click "Create Poll"**, then confirm in your wallet
 
-### Voting
+### Vote
 
-1. **Browse active polls** on the home page
-2. **Click on an option** to cast your encrypted vote
-3. **Confirm the transaction** in your wallet
-4. Your vote is encrypted and cannot be viewed until the poll expires
+1. Browse active polls on the home page
+2. Click an option and confirm the transaction
+3. Your choice is encrypted on-chain and hidden until the poll ends
 
-### Viewing Results
+### View Results
 
-- **Active polls**: Vote counts are encrypted and not visible
-- **Expired polls**: Vote counts can be decrypted and viewed
-- **My Votes**: View all polls you've voted on
+- **Active**: total count and individual choices are encrypted and hidden
+- **Ended**: each option’s count and percentage are publicly shown; identities are never revealed
+- **My Votes**: highlights your choice locally on your device (not shared)
 
-## 🔧 Smart Contract Functions
+## 🔧 Smart Contract (Core)
 
 ### `createPoll(title, description, options, expireAt)`
 Creates a new poll with the specified parameters.
@@ -229,7 +226,7 @@ Casts an encrypted vote for a specific option in a poll.
 Returns the poll information (title, description, options, etc.).
 
 ### `getEncryptedVoteCount(pollId, optionIndex)`
-Returns the encrypted vote count for a specific option.
+Returns the encrypted count for the given option (used for homomorphic operations while active).
 
 ### `hasVoted(pollId, voter)`
 Checks if a specific address has voted on a poll.
@@ -238,16 +235,17 @@ Checks if a specific address has voted on a poll.
 Returns the total number of polls created.
 
 ### `endPoll(pollId)`
-Ends a poll (can be called by the poll creator).
+Ends a poll (callable after expiration).
 
-## 🔐 FHEVM Configuration
+### `requestFinalize(pollId)` / `getClearVoteCounts(pollId)`
+After a poll ends, request on-chain decryption; once completed, retrieve per-option clear counts for percentages.
 
-The application uses Zama's FHEVM for encrypted operations:
+## 🔐 FHEVM Notes
+
+This app relies on Zama FHEVM to perform homomorphic addition while data remains encrypted, preventing trend observation during voting. After expiration, results are decrypted and published.
 
 ### Sepolia Testnet FHEVM Contracts
-- **ACL Contract**: `0x687820221192C5B662b25367F70076A37bc79b6c`
-- **KMS Verifier**: `0x1364cBBf2cDF5032C47d8226a6f6FBD2AFCDacAC`
-- **Input Verifier**: `0xbc91f3daD1A5F19F8390c400196e58073B6a0BC4`
+
 - **Gateway Chain ID**: 55815
 - **Relayer URL**: `https://relayer.testnet.zama.cloud`
 

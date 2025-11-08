@@ -89,6 +89,37 @@ export function getContractReadOnly(provider: ethers.Provider, chainId?: number)
   return new ethers.Contract(contractAddress, CONTRACT_ABI, provider);
 }
 
+// Request finalize (decrypt and publish clear results)
+export async function requestFinalize(
+  signer: ethers.Signer,
+  pollId: number,
+  chainId?: number
+): Promise<ethers.ContractTransactionResponse> {
+  const contract = getContract(signer, chainId);
+  return await contract.requestFinalize(pollId) as Promise<ethers.ContractTransactionResponse>;
+}
+
+// Check if poll is finalized (clear results published)
+export async function isFinalized(
+  provider: ethers.Provider,
+  pollId: number,
+  chainId?: number
+): Promise<boolean> {
+  const contract = getContractReadOnly(provider, chainId);
+  return await contract.isFinalized(pollId);
+}
+
+// Get clear vote counts for a poll
+export async function getClearVoteCounts(
+  provider: ethers.Provider,
+  pollId: number,
+  chainId?: number
+): Promise<number[]> {
+  const contract = getContractReadOnly(provider, chainId);
+  const counts: bigint[] = await contract.getClearVoteCounts(pollId);
+  return counts.map((c) => Number(c));
+}
+
 // Create a poll
 export async function createPoll(
   signer: ethers.Signer,
@@ -228,6 +259,16 @@ export async function castVote(
     
     throw new Error(errorMessage);
   }
+}
+
+// End a poll (after expiration)
+export async function endPollTx(
+  signer: ethers.Signer,
+  pollId: number,
+  chainId?: number
+): Promise<ethers.ContractTransactionResponse> {
+  const contract = getContract(signer, chainId);
+  return await contract.endPoll(pollId) as Promise<ethers.ContractTransactionResponse>;
 }
 
 // Get all polls

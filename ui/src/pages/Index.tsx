@@ -5,7 +5,7 @@ import Header from "@/components/Header";
 import PollCard from "@/components/PollCard";
 import backgroundPattern from "@/assets/background-pattern.png";
 import { Loader2 } from "lucide-react";
-import { getAllPolls, getEncryptedVoteCount, hasUserVoted, castVote, type Poll, getContractAddress } from "@/lib/contract";
+import { getAllPolls, getEncryptedVoteCount, hasUserVoted, castVote, type Poll, getContractAddress, isFinalized as isFinalizedOnChain, getClearVoteCounts, requestFinalize, endPollTx } from "@/lib/contract";
 import { getFHEVMInstance, encryptOptionIndex } from "@/lib/fhevm";
 import { chains } from "@/lib/wagmi";
 import { ethers } from "ethers";
@@ -23,6 +23,9 @@ const Index = () => {
   const [polls, setPolls] = useState<Poll[]>([]);
   const [userVotes, setUserVotes] = useState<Vote[]>([]);
   const [loading, setLoading] = useState(true);
+  const [finalizedByPoll, setFinalizedByPoll] = useState<Record<number, boolean>>({});
+  const [resultsByPoll, setResultsByPoll] = useState<Record<number, { counts: number[]; total: number; percentages: number[] }>>({});
+  const [revealingByPoll, setRevealingByPoll] = useState<Record<number, boolean>>({});
   const { toast } = useToast();
 
   useEffect(() => {
@@ -41,9 +44,43 @@ const Index = () => {
     if (!publicClient) return;
 
     try {
-      const provider = new ethers.BrowserProvider(publicClient as any);
+      // Prefer injected provider to avoid third-party RPCs (prevents 429/CORS)
+      let provider: ethers.BrowserProvider | ethers.JsonRpcProvider;
+      if (typeof window !== "undefined" && (window as any).ethereum) {
+        provider = new ethers.BrowserProvider((window as any).ethereum, "any");
+      } else {
+        // Fallback read-only RPC
+        const rpcUrl = (chainId === 31337)
+          ? "http://localhost:8545"
+          : "https://rpc.sepolia.org";
+        provider = new ethers.JsonRpcProvider(rpcUrl);
+      }
       const allPolls = await getAllPolls(provider, chainId || undefined);
       setPolls(allPolls);
+      // Load results/finalization status for ended polls
+      for (const p of allPolls) {
+        const now = Date.now();
+        const ended = Number(p.expireAt) * 1000 <= now || !p.isActive;
+        if (ended) {
+          try {
+            const finalized = await isFinalizedOnChain(provider, p.id, chainId || undefined);
+            setFinalizedByPoll(prev => ({ ...prev, [p.id]: finalized }));
+            if (finalized) {
+              const counts = await getClearVoteCounts(provider, p.id, chainId || undefined);
+              const total = counts.reduce((a, b) => a + b, 0);
+              const percentages = counts.map(c => total > 0 ? (c * 100) / total : 0);
+              setResultsByPoll(prev => ({ ...prev, [p.id]: { counts, total, percentages } }));
+            } else {
+              // Auto-request finalize when a poll has ended but results aren't published yet.
+              // Requires a connected wallet to submit the tx; if not connected, skip silently.
+              if (isConnected && address && !(revealingByPoll[p.id])) {
+                // Fire and forget; UI will refresh on next fetch
+                handleRevealResults(p.id).catch(() => {});
+              }
+            }
+          } catch { /* ignore */ }
+        }
+      }
     } catch (error: any) {
       toast({
         variant: "destructive",
@@ -55,20 +92,82 @@ const Index = () => {
     }
   };
 
+  const handleRevealResults = async (pollId: number) => {
+    if (!isConnected || !address) {
+      toast({
+        variant: "destructive",
+        title: "Wallet not connected",
+        description: "Please connect your wallet.",
+      });
+      return;
+    }
+    if (!publicClient) return;
+    try {
+      setRevealingByPoll(prev => ({ ...prev, [pollId]: true }));
+      const ethereum = (window as any).ethereum;
+      const provider = new ethers.BrowserProvider(ethereum, "any");
+      const accounts = await provider.listAccounts();
+      if (accounts.length === 0) {
+        try { await provider.send("eth_requestAccounts", []); } catch { /* ignore */ }
+      }
+      const signer = await provider.getSigner();
+      // Ensure poll is ended on-chain before finalize (endPoll may revert if already ended; ignore)
+      try {
+        const endTx = await endPollTx(signer, pollId, chainId || undefined);
+        await endTx.wait();
+      } catch {}
+      const tx = await requestFinalize(signer, pollId, chainId || undefined);
+      await tx.wait();
+      // Poll finalization state a few times
+      const readProvider = new ethers.BrowserProvider(publicClient as any);
+      for (let i = 0; i < 10; i++) {
+        await new Promise(r => setTimeout(r, 1500));
+        const finalized = await isFinalizedOnChain(readProvider, pollId, chainId || undefined);
+        if (finalized) {
+          const counts = await getClearVoteCounts(readProvider, pollId, chainId || undefined);
+          const total = counts.reduce((a, b) => a + b, 0);
+          const percentages = counts.map(c => total > 0 ? (c * 100) / total : 0);
+          setFinalizedByPoll(prev => ({ ...prev, [pollId]: true }));
+          setResultsByPoll(prev => ({ ...prev, [pollId]: { counts, total, percentages } }));
+          toast({ title: "Results revealed", description: "Clear results are now available." });
+          return;
+        }
+      }
+      toast({ variant: "destructive", title: "Reveal pending", description: "Decryption not completed yet. Please try again shortly." });
+    } catch (error: any) {
+      toast({
+        variant: "destructive",
+        title: "Failed to reveal results",
+        description: error.message || "Please try again.",
+      });
+    } finally {
+      setRevealingByPoll(prev => ({ ...prev, [pollId]: false }));
+    }
+  };
+
   const fetchUserVotes = async () => {
     if (!publicClient || !address) return;
 
     try {
-      const provider = new ethers.BrowserProvider(publicClient as any);
+      // Use injected provider for read to avoid third-party RPC throttling
+      let provider: ethers.BrowserProvider | ethers.JsonRpcProvider;
+      if (typeof window !== "undefined" && (window as any).ethereum) {
+        provider = new ethers.BrowserProvider((window as any).ethereum, "any");
+      } else {
+        const rpcUrl = (chainId === 31337)
+          ? "http://localhost:8545"
+          : "https://rpc.sepolia.org";
+        provider = new ethers.JsonRpcProvider(rpcUrl);
+      }
       const votes: Vote[] = [];
 
       for (const poll of polls) {
         const hasVotedResult = await hasUserVoted(provider, poll.id, address, chainId || undefined);
         if (hasVotedResult) {
-          // TODO: Get the actual option index the user voted for
-          // This requires storing vote data or decrypting to find which option was selected
-          // For now, we'll just mark that they voted
-          votes.push({ pollId: poll.id, optionIndex: -1 });
+          const storageKey = `svb:votes:${chainId || 0}:${address}:${poll.id}`;
+          const stored = localStorage.getItem(storageKey);
+          const storedIndex = stored !== null ? parseInt(stored, 10) : -1;
+          votes.push({ pollId: poll.id, optionIndex: isNaN(storedIndex) ? -1 : storedIndex });
         }
       }
 
@@ -97,10 +196,34 @@ const Index = () => {
       return;
     }
 
-    // Check if user has already voted before attempting to vote
+    // Prevent voting on ended polls (extra guard in addition to contract check)
     try {
-      const provider = new ethers.BrowserProvider(publicClient as any);
-      const hasVotedResult = await hasUserVoted(provider, parseInt(pollId), address, chainId || undefined);
+      const poll = polls.find(p => p.id === parseInt(pollId));
+      if (poll) {
+        const status = getPollStatus(poll);
+        if (status === "ended") {
+          toast({
+            variant: "destructive",
+            title: "Poll ended",
+            description: "This poll has already ended. Voting is closed.",
+          });
+          return;
+        }
+      }
+    } catch {}
+
+    // Check if user has already voted before attempting to vote (using injected provider to avoid stale RPC)
+    try {
+      let readProvider: ethers.BrowserProvider | ethers.JsonRpcProvider;
+      if (typeof window !== "undefined" && (window as any).ethereum) {
+        readProvider = new ethers.BrowserProvider((window as any).ethereum, "any");
+      } else {
+        const rpcUrl = (chainId === 31337)
+          ? "http://localhost:8545"
+          : "https://rpc.sepolia.org";
+        readProvider = new ethers.JsonRpcProvider(rpcUrl);
+      }
+      const hasVotedResult = await hasUserVoted(readProvider, parseInt(pollId), address, chainId || undefined);
       if (hasVotedResult) {
         toast({
           variant: "destructive",
@@ -110,8 +233,14 @@ const Index = () => {
         return;
       }
     } catch (error) {
-      // If check fails, continue anyway - the contract will reject if already voted
+      // Be conservative: if we cannot verify, ask the user to refresh instead of sending a likely-reverting tx
       console.warn("Failed to check if user has voted:", error);
+      toast({
+        variant: "destructive",
+        title: "Unable to verify voting status",
+        description: "Please refresh the page and try again.",
+      });
+      return;
     }
 
     // Check if contract is deployed on current network
@@ -126,13 +255,21 @@ const Index = () => {
     }
 
     try {
-      // Use walletClient to get signer instead of publicClient
-      if (!walletClient) {
-        throw new Error("Wallet client not available. Please ensure your wallet is connected.");
+      // In production (Vercel), always use the injected EIP-1193 provider (window.ethereum)
+      if (typeof window === "undefined" || !(window as any).ethereum) {
+        throw new Error("No wallet provider detected. Please install or enable your wallet.");
       }
-      
-      // Convert walletClient to ethers signer (same method as CreatePoll.tsx)
-      const provider = new ethers.BrowserProvider(walletClient as any);
+      const ethereum = (window as any).ethereum;
+      const provider = new ethers.BrowserProvider(ethereum, "any");
+      // Ensure accounts are available (some wallets require explicit request)
+      const accounts = await provider.listAccounts();
+      if (accounts.length === 0) {
+        try {
+          await provider.send("eth_requestAccounts", []);
+        } catch (reqErr) {
+          throw new Error("Wallet not authorized. Please connect your wallet.");
+        }
+      }
       const signer = await provider.getSigner();
 
       // Initialize FHEVM instance (use chainId instead of provider)
@@ -190,6 +327,12 @@ const Index = () => {
         title: "Vote submitted successfully!",
         description: "Your encrypted vote has been recorded.",
       });
+
+      // Persist user selection locally for display (privacy-preserving)
+      try {
+        const storageKey = `svb:votes:${chainId || 0}:${address}:${parseInt(pollId)}`;
+        localStorage.setItem(storageKey, String(optionIndex));
+      } catch {}
 
       // Refresh polls and votes
       await fetchPolls();
@@ -282,6 +425,8 @@ const Index = () => {
             {polls.map((poll) => {
               const userVote = userVotes.find(v => v.pollId === poll.id);
               const status = getPollStatus(poll);
+              const finalized = finalizedByPoll[poll.id] || false;
+              const results = resultsByPoll[poll.id];
               return (
                 <PollCard
                   key={poll.id}
@@ -291,10 +436,14 @@ const Index = () => {
                   options={poll.options.map((opt, idx) => ({ id: `option-${idx}`, text: opt }))}
                   status={status as "active" | "ended"}
                   timeRemaining={getTimeRemaining(poll.expireAt)}
-                  totalVotes={0}
-                  isEncrypted={true}
+                  totalVotes={results?.total || 0}
+                  isEncrypted={status === "active"}
                   userVote={userVote?.optionIndex}
                   onVote={handleVote}
+                  finalized={finalized}
+                  results={results}
+                  onReveal={status === "ended" && !finalized ? () => handleRevealResults(poll.id) : undefined}
+                  revealing={!!revealingByPoll[poll.id]}
                 />
               );
             })}

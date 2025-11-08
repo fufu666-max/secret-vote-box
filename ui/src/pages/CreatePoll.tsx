@@ -81,7 +81,21 @@ const CreatePoll = () => {
     setLoading(true);
 
     try {
-      const provider = new ethers.BrowserProvider(walletClient as any);
+      // In production (Vercel), always use the injected EIP-1193 provider (window.ethereum)
+      if (typeof window === "undefined" || !(window as any).ethereum) {
+        throw new Error("No wallet provider detected. Please install or enable your wallet.");
+      }
+      const ethereum = (window as any).ethereum;
+      const provider = new ethers.BrowserProvider(ethereum, "any");
+      // Ensure accounts are available (some wallets require explicit request)
+      const accounts = await provider.listAccounts();
+      if (accounts.length === 0) {
+        try {
+          await provider.send("eth_requestAccounts", []);
+        } catch (reqErr) {
+          throw new Error("Wallet not authorized. Please connect your wallet.");
+        }
+      }
       const signer = await provider.getSigner();
       
       // Validate and adjust expiration time
